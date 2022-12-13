@@ -8,6 +8,11 @@
 \usepackage[algo2e]{algorithm2e} 
 \usepackage{multirow}
 \usepackage[pagebackref,breaklinks,colorlinks]{hyperref}
+\usepackage{subcaption,graphicx}
+\usepackage{lipsum}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{supertabular, booktabs}
 
 % Support for easy cross-referencing
 \usepackage[capitalize]{cleveref}
@@ -19,16 +24,189 @@
 \begin{document}
 \nocite{*}
 
-\title{Template File}
-\author{The author name}
-\maketitle
 
-%% Here goes your code
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}{.3\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/regular_maps.png}
+    \caption{Regular maps}
+  \end{subfigure}%
+  \hfill
+  \begin{subfigure}{.3\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/random_maps.png}
+    \caption{Random maps}
+  \end{subfigure}%
+  \hfill
+  \begin{subfigure}{.3\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/free_maps.png}
+    \caption{Free maps}
+  \end{subfigure}
+  \caption{Map examples. The black and colored nodes represent the static and
+dynamic obstacles respectively. Map parameters can be found in Section V-B}
+\end{figure}
 
+environments and contains both static and dynamic obstacles,
+where the static obstacles are regularly arranged and the
+dynamic ones move within the aisles. In the random map,
+we randomly set up a certain density of static obstacles and
+dynamic obstacles. In the free map, we only consider a certain
+density of dynamic obstacles. The default size of all the maps
+is 100 × 100. The static obstacle density in each map is set
+to 0.392, 0.15, and 0, respectively, and the dynamic obstacle
+density is set to 0.03, 0.05, and 0.1, respectively. Dynamic
+obstacles are modeled as un-controllable robots that are able
+to move one cell at each step in any direction. Their start/goal
+cells are randomly generated, and their desired trajectories are
+calculated through A* by considering the current position of
+any other obstacles. During training and testing, each dynamic
+obstacle continuously moves along its trajectory, and when
+motion conflict occurs, it will: 1) with a probability of 0.9, stay
+in its current cell until the next cell is available; 2) otherwise,
+reverse its direction and move back to its start cell
+
+\textit{C. Training and Testing}
+
+We train our model with one NVIDIA GTX 1080ti GPU in
+Python 3.6 with TensorFlow 1.4 \cite{abadi2016tensorflow}
+The learning rate is fixed to $3 \times 10^{-5}$, and the training optimizer is \texttt{RMSprop}. We use $\epsilon$-greedy to balance exploration and exploitation. The initial
+value is set to be $\epsilon = 1$.and decreases to 0.1 linearly when the
+total training steps reach 200, 000. In training, we randomly
+choose one of the three maps as the training map and configure
+the dynamic obstacles by following the settings in Section V-B.
+Then we randomly select two free cells as the start and goal
+cells. During the training, we end the current episode and start
+a new one if one of the following conditions is satisfied: 1)
+the number of training steps in the current episode reaches a
+maximum defined as $N_{m} = 50 + 10 \times N_{e}$;2) the robot can
+not obtain any global guidance information in its local FOV;
+3) the robot reaches its goal cell $\mathit{c_{goal}}$. In addition, after the
+robot completes 50 episodes, the start and goal cells of all the
+dynamic obstacles are re-randomized.
+Before learning starts, one robot explores the environment
+to fill up the replay buffer, which is comprised of a Sumtree
+structure to perform prioritized experience replay \cite{schaul2015prioritized}; Note
+that Sumtree is a binary tree, which computes the sum of
+the values of its children as the value of a parent node. In
+each episode, the robot samples a batch of transitions from the
+replay buffer with prioritized experience replay (PER) based
+on the calculated temporal difference error by the DDQN algorithm. During testing, all methods are executed on an Intel
+i7-8750H CPU.
+
+\textit{D. Performance Metrics}
+
+The following metrics are used for performance evaluation:
+\begin{itemize}
+    \item \textit{Moving cost}
+    \begin{equation}
+        \text{Moving Cost} = \frac{N_{s}}{\lvert c_{goal} - c_{start}\rvert L1}
+    \end{equation}
+    where $N_{s}$ is the number of steps taken and $\lvert c_{goal} - c_{start}\rvert L1$is the Manhattan distance between the start cell and the
+    goal cell. This metric is used to indicate the ratio of actual
+    moving steps w.r.t the ideal number of moving steps without
+    considering any obstacles.
+    \item \textit{Detouyr Percentage}
+    \begin{equation}
+        \text{Detour Percentage} = \frac{N_{s}-L_{A}*(c_{start},c_{goal})}{L_{A}*(c_{start},c_{goal})} \times 100\%
+    \end{equation}
+    where $L_{A}*(c_{start},c_{goal}$is the length of the shortest path
+    between the start cell and the goal cell, which is calculated
+    with A* algorithm by only considering the static obstacles.
+    This metric indicates the percentage of detour w.r.t the
+    shortest path length.
+    \item \textit{Computing Time}:This measure corresponds to the average
+    computing time at each step during the testing. The com-
+    puting time is normalized by $N_{s}$
+\end{itemize}
+
+\section{Results}
+In this section, we present comparative results for both the
+single-robot and multi-robot path planning tasks
+
+\textit{A. Single-Robot Path Planning Results}
+We compare our approach with dynamic A* based meth-
+ods with global re-planning and local re-planning strategies,
+and we call these two methods Global Re-planning
+and Local Re-planning respectively. For Global
+Re-planning, each time the robot encounters a conflict, an
+alternative path is searched for from the current cell to the goal
+cell by using the A* method, considering the current position
+of all the dynamic obstacles. For Local Re-planning,
+an alternative path is searched for from the current cell to the
+farthest cell within the robot’s FOV. We train our model by
+using both the three environments shown in Figure 3, and then
+compare our testing results with Global Re-planning
+and Local Re-planning in the three environments sepa-
+rately. For each map, we separate the comparison into three
+groups with different Manhattan distances between the start
+cell and the goal cell, which are set to 50, 100, and 150,
+respectively. For each group, 100 pairs of start and goal
+locations are randomly selected and the mean value and its
+standard deviation are calculated. The desired trajectories of
+dynamic obstacles are consistent among the testing of each
+method for a fair comparison.
+The comparison results are shown in Table I, which validate
+that: 1) Compared with Local Re-planning and Global
+Re-planning, our approach uses the smallest number of
+
+
+\begin{table*}
+    \begin{tabular}{cccccccccc}
+    \hline
+        \text{} & \multicolumn{6}{Success Rate}{Computing Time(ms)} \multicolumn{3}{*}{Computing Time(ms)}\\
+        \hline
+        \text{} & a & b & v & v & v 
+    \end{tabular}
+        
+\end{table*}
+
+
+[28], (iv) a velocity-based method ORCA [29] and, (v), the
+RL based approach PRIMAL [19]. For HCA∗, the priorities of
+the robots are randomly chosen. For CBS, since computing
+an optimal solution when the robot number is larger than
+50 is often intractable, we use its sub-optimal version ECBS
+[28] with a sub-optimality bound set to 1.03. For ORCA, we
+calculate the next position of the robot by only considering the
+angle of the velocity output and thus transform the continuous-
+space ORCA into a discrete version Discrete-ORCA. It
+should be noted that neither our approach nor PRIMAL has
+been trained in the testing maps. For PRIMAL, we directly
+use the trained model provided online by the authors 1. In our
+approach, we directly use the model trained in a single robot
+case.
+Comparisons are performed in three different maps with
+size 40 × 40 and varying numbers of robots, which are smaller
+versions of the maps in Figure 3. The static obstacle densities
+are set to 0.45, 0.15, and 0 in the regular, random, and free
+maps, respectively, and the robot numbers are set to 32, 64,
+and 128. In each map, we generate 100 random configurations
+of robots with different start and goal cells. To ensure the
+solvability of the problem, once each robot arrives at its goal
+cell, we remove the robot from the environment to avoid
+conflicts. We set a time-out of 100 time-steps for all the
+tests, within which time if any robot can not reach its goal,
+this test is defined as a failure case. In Figures 4 (a)-(c), we
+compare the number of robots that have reached their goals
+as a function of time. In Figures 4 (d)-(f), we compare the
+flowtime of the different approaches. In Table V, we compare
+their success rates and computing times. Since in Global
+Re-planning, ECBS and HCA∗, the robot action is not
+generated online at each step, we only compare the computing
+time of Discrete-ORCA, PRIMAL and our approach. The
+computing time is normalized by the average flowtime.
+These results demonstrate that: 1) Our approach maintains
+consistent performance across different environments, outper-
+forming Global Re-planning and PRIMAL, also outper-
+forming Discrete-ORCA in most cases (Discrete-ORCA
+can not handle the crowded static obstacles, so it is only
+effective in the free map). ECBS and HCA∗ achieve the
+best performance overall, since they are both centralized
+    
 {\small
 \bibliographystyle{IEEEtran}
-\bibliography{references}
+\bibliography{reference.bib}
 }
-
 \end{document}
-
